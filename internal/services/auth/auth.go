@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sso/internal/lib/jwt"
 	"sso/internal/lib/logger/sl"
 	"sso/internal/storage"
 	"time"
@@ -14,6 +15,8 @@ import (
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrUserExists         = errors.New("user exists")
+	ErrInvalidAppId       = errors.New("invalid app id")
 )
 
 // New creates new Auth instance.
@@ -55,7 +58,7 @@ func (a Auth) Login(ctx context.Context, email, password string, appId int) (tok
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			log.Warn("user not found", sl.Err(err))
-			return "", fmt.Errorf(`%s: %w`, op, err)
+			return "", ErrInvalidCredentials
 		}
 
 		log.Error("user find failed", sl.Err(err))
@@ -69,11 +72,22 @@ func (a Auth) Login(ctx context.Context, email, password string, appId int) (tok
 
 	app, err := a.appProvider.App(ctx, appId)
 	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Warn("user not found", sl.Err(err))
+			return "", ErrInvalidAppId
+		}
 		return "", fmt.Errorf(`%s: %w`, op, err)
 	}
 
 	log.Info("user logged in")
 
+	token, err = jwt.NewToken(user, app, a.tokenTTL)
+	if err != nil {
+		log.Error("token creation failed", sl.Err(err))
+		return "", fmt.Errorf(`%s: %w`, op, err)
+	}
+
+	return token, nil
 }
 
 // RegisterNewUser creates a new user account.
@@ -96,6 +110,11 @@ func (a Auth) RegisterNewUser(ctx context.Context, email, password string) (user
 
 	uid, err := a.userSaver.SaveUser(ctx, email, passHash)
 	if err != nil {
+		if errors.Is(err, storage.ErrUserExists) {
+			log.Warn("user already exists", sl.Err(err))
+			return 0, ErrUserExists
+		}
+
 		log.Error("save user failed", sl.Err(err))
 		return 0, fmt.Errorf(`save user: %w`, err)
 	}
@@ -107,6 +126,21 @@ func (a Auth) RegisterNewUser(ctx context.Context, email, password string) (user
 //
 // If the user does not exist, an error is returned.
 func (a Auth) IsAdmin(ctx context.Context, userID int64) (isAdmin bool, err error) {
-	//TODO implement me
-	panic("implement me")
+	const op = "auth.IsAdmin"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.Int64("user_id", userID),
+	)
+
+	isAdmin, err = a.userProvider.IsAdmin(ctx, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Warn("user not found", sl.Err(err))
+			return false, fmt.Errorf(`%s: %w`, op, err)
+		}
+
+		log.Error("check admin failed", sl.Err(err))
+		return false, fmt.Errorf(`check admin: %w`, err)
+	}
+	return isAdmin, nil
 }
