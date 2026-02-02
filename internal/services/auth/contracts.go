@@ -13,3 +13,7 @@ type UserProvider interface {
 	User(ctx context.Context, email int64) (models.User, error)
 	IsAdmin(ctx context.Context, userID int64) (bool, error)
 }
+
+type AppProvider interface {
+	App(ctx context.Context, appID int) (models.App, error)
+}
