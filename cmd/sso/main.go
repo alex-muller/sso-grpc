@@ -18,9 +18,8 @@ func main() {
 
 	log := setupLogger(cfg.Env)
 
-	log.Info("starting application")
+	log.Info("starting application", slog.Any("config", cfg))
 
-	// TODO: инициализировать объект логгера
 	// TODO: инициализировать приложение (app)
 	// TODO: запустить gRPC-сервер приложения
 }
