@@ -58,6 +58,40 @@ func (a serverApi) Login(
 	}, nil
 }
 
+func (a serverApi) Register(
+	ctx context.Context,
+	request *ssov1.RegisterRequest,
+) (*ssov1.RegisterResponse, error) {
+	if err := a.validateRegister(request); err != nil {
+		return nil, err
+	}
+
+	userID, err := a.auth.RegisterNewUser(ctx, request.GetEmail(), request.GetPassword())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	return &ssov1.RegisterResponse{
+		UserId: userID,
+	}, nil
+}
+
+func (a serverApi) IsAdmin(
+	ctx context.Context,
+	request *ssov1.IsAdminRequest,
+) (*ssov1.IsAdminResponse, error) {
+	err := a.validateIsAdmin(request)
+	if err != nil {
+		return nil, err
+	}
+
+	isAdmin, err := a.auth.IsAdmin(ctx, request.GetUserId())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+	return &ssov1.IsAdminResponse{IsAdmin: isAdmin}, nil
+}
+
 func (a serverApi) validateLogin(req *ssov1.LoginRequest) error {
 	if req.GetEmail() == "" {
 		return status.Error(codes.InvalidArgument, "email is required")
@@ -73,18 +107,22 @@ func (a serverApi) validateLogin(req *ssov1.LoginRequest) error {
 	return nil
 }
 
-func (a serverApi) Register(
-	ctx context.Context,
-	request *ssov1.RegisterRequest,
-) (*ssov1.RegisterResponse, error) {
-	//TODO implement me
-	panic("implement me")
+func (a serverApi) validateRegister(req *ssov1.RegisterRequest) error {
+	if req.GetEmail() == "" {
+		return status.Error(codes.InvalidArgument, "email is required")
+	}
+
+	if req.GetPassword() == "" {
+		return status.Error(codes.InvalidArgument, "password is required")
+	}
+
+	return nil
 }
 
-func (a serverApi) IsAdmin(
-	ctx context.Context,
-	request *ssov1.IsAdminRequest,
-) (*ssov1.IsAdminResponse, error) {
-	//TODO implement me
-	panic("implement me")
+func (a serverApi) validateIsAdmin(req *ssov1.IsAdminRequest) error {
+	if req.GetUserId() == emptyValue {
+		return status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	return nil
 }
