@@ -2,12 +2,18 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sso/internal/lib/logger/sl"
+	"sso/internal/storage"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+)
+
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
 // New creates new Auth instance.
@@ -39,8 +45,35 @@ type Auth struct {
 //
 // If the user does not exist or the password is incorrect, an error is returned.
 func (a Auth) Login(ctx context.Context, email, password string, appId int) (token string, err error) {
-	//TODO implement me
-	panic("implement me")
+	const op = "auth.Login"
+	log := a.log.With(
+		slog.String("op", op),
+		slog.String("email", email),
+	)
+	log.Info("attempting to login user")
+	user, err := a.userProvider.User(ctx, email)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Warn("user not found", sl.Err(err))
+			return "", fmt.Errorf(`%s: %w`, op, err)
+		}
+
+		log.Error("user find failed", sl.Err(err))
+		return "", fmt.Errorf(`user find: %w`, err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword(user.PassHash, []byte(password)); err != nil {
+		log.Info("invalid credentials", sl.Err(err))
+		return "", fmt.Errorf(`%s: %w`, op, err)
+	}
+
+	app, err := a.appProvider.App(ctx, appId)
+	if err != nil {
+		return "", fmt.Errorf(`%s: %w`, op, err)
+	}
+
+	log.Info("user logged in")
+
 }
 
 // RegisterNewUser creates a new user account.
